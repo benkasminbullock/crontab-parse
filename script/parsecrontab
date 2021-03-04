@@ -1,0 +1,58 @@
+#!/home/ben/software/install/bin/perl
+use warnings;
+use strict;
+use utf8;
+use FindBin '$Bin';
+use lib "$Bin/../lib";
+use Crontab::Parse ':all';
+
+if (@ARGV) {
+    for my $file (@ARGV) {
+	my $system;
+	if ($file eq '/etc/crontab') {
+	    $system = 1;
+	}
+	my @lines = parse_crontab_file ($file, system => $system, strip => 1);
+	print_line (\@lines);
+    }
+}
+else {
+    my @lines = parse_crontab (strip => 1);
+    print_line (\@lines);
+}
+
+sub print_line
+{
+    my ($lines) = @_;
+    for (@$lines) {
+	my $type = $_->{type};
+	if ($type eq 'env') {
+	    next;
+	}
+	my $t = crontab_time ($_);
+	print "$t\t";
+	if ($_->{user}) {
+	    print "$_->{user}\t";
+	}
+	if ($_->{command}) {
+	    print "$_->{command} ";
+	}
+	print "\n";
+	if (! $_->{special}) {
+	    my $map = cron_time_map ($_);
+	    my $next = cron_next ($map);
+	    if (! $next) {
+		warn "cron_next failed";
+	    }
+	    else {
+		my $eng = next_to_english ($next);
+		print "Next run at $eng\n";
+	    }
+	}
+	print "\n";
+    }
+}
+
+# Local variables:
+# mode: perl
+# End:

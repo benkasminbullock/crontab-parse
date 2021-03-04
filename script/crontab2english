@@ -1,0 +1,37 @@
+#!/home/ben/software/install/bin/perl
+use warnings;
+use strict;
+use utf8;
+use FindBin '$Bin';
+use lib "$Bin/../lib";
+use Crontab::Parse ':all';
+
+
+if (@ARGV) {
+    for my $file (@ARGV) {
+	my $system;
+	if ($file eq '/etc/crontab') {
+	    $system = 1;
+	}
+	my @lines = parse_crontab_file ($file, system => $system, strip => 1);
+	print_english (\@lines);
+    }
+}
+else {
+    my @lines = parse_crontab (strip => 1);
+    print_english (\@lines);
+}
+exit;
+
+sub print_english
+{
+    my ($lines) = @_;
+    for my $line (@$lines) {
+	print to_english ($line), "\n";
+    }
+}
+
+
+# Local variables:
+# mode: perl
+# End:

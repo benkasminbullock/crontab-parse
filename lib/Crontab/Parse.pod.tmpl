@@ -17,11 +17,11 @@ This method was added in version [% version %] of the module.
 
 =head1 NAME
 
-[% info.colon %] - abstract here.
+[% info.colon %] - Parse crontab files
 
 =head1 SYNOPSIS
 
-    use [% info.colon %];
+[% example("synopsis") %]
 
 =head1 VERSION
 
@@ -31,6 +31,497 @@ corresponding to L<git commit [% commit.commit %]|[% info.repo
 
 =head1 DESCRIPTION
 
+This module parses crontab files and returns the result as an array
+containing details of each line of the file.
+
 =head1 FUNCTIONS
 
+=head2 cron_next
+
+    my $map = cron_time_map ($line);
+    my $next = cron_next ($map);
+
+This returns the next time of running the job, from the current time,
+as determined by C<System_Clock> in L</Date::Calc>. It is also
+possible to specify a time, as a hash reference:
+
+    my $next = cron_next ($map, {year => 2021, month => 3,
+                          dom => 4, dow => 4, hour => 12, minute => 12});
+
+Although it's not part of a crontab time value, the year needs to be
+supplied with the time, since it may be necessary to work out the day
+of the week of a month day, or the number of days in a month. The
+return value is a hash reference with the fields C<month> (from 1-12),
+C<dom> (from 1-31), C<dow> (from 0-6), C<hour> (from 0-23), and minute
+(from 0-59). This may be converted to English using
+L</next_to_english>.
+
+=head2 cron_time_map
+
+    my $map = cron_time_map ($line);
+
+Given a line parsed by L</parse_crontab_file>, this returns a "map" of
+which times the job will run. The map is a hash reference with five
+keys, and each of the values of the keys contains an array reference
+with entries 1 or 0 for "run" or "don't run". The keys are as follows:
+
+=over
+
+=item month
+
+The month. The array reference value 0 is always 0. Values from 1 to
+12 may be 1 or 0.
+
+=item dom
+
+The day of the month. The value at 0 is always 0. Values from 1 to 31
+may be 1 or 0. 
+
+=item dow
+
+The day of the week, with 0 Sunday and 6 Saturday. Values may be 1 or
+0. 
+
+In the case that day of week is C<*> and day of month is <*> in the
+crontab, the values are all zero, and the values of L</dom> are all 1.
+
+=item hour
+
+The hour. Values from 0 to 23 may be 1 or 0.
+
+=item minute
+
+The minute. Values from 0 to 63 may be 1 or 0.
+
+=back
+
+=head2 crontab_time
+
+    my $time = crontab_time ($line);
+
+Convert the time fields of a single line returned from
+L</parse_crontab> back into the crontab time format, separated by tab
+characters (C<"\t">). The names of days of the week and months are not
+preserved but are turned into numbers.
+
+=head2 next_to_english
+
+    my $english = next_to_english ($next);
+
+Convert the result of L</cron_tab_next> into an English sentence.
+
+=head2 parse_crontab
+
+    my @lines = parse_crontab ();
+
+Parse the user's crontab file. All options and other behaviour are
+otherwise identical to L</parse_crontab_file>.
+
+    my @lines = parse_crontab (%options);
+
+=head2 parse_crontab_file
+
+    my @lines = parse_crontab_file ($file, %options);
+
+Parse a crontab file. For example, to parse the system crontab:
+
+    my @lines = parse_crontab_file ('/etc/crontab', system => 1);
+
+If the L</system> option is set, each line contains a L</user> field
+for the user.
+
+=head3 Return value
+
+The return value is an array containing the lines of the crontab. Each
+line is parsed into a hash reference which contains the following
+fields:
+
+=over
+
+=item type
+
+The type of the line. This is one of 
+
+=over
+
+=item blank
+
+A blank line. 
+
+Specify option L</strip> to ignore blank lines.
+
+=item comment
+
+A comment line.  In this case the field L</comment> contains the
+comment itself, without the leading hash mark. 
+
+Specify option L</strip> to ignore comment lines.
+
+=item env
+
+A line containing an environment variable. In this case the fields
+L</name> for the name of the variable and L</value> for its value are
+also set.
+
+※ See the crontab manual page (L</Unix manual pages>) for what
+environment variables may be set in a crontab file.
+
+=item job
+
+A line containing a job to run. In this case, the field L</command>
+contains the contents of the command, the field L</time> contains the
+time string, and the parsed fields of the time, L</minute>, L</hour>,
+L</dom>, L</month>, and L</dow> and L</special> may also be specified.
+
+=back
+
+=item command
+
+In the case of a line of type L</job>, the command to be executed. 
+
+As of this version of [% info.colon %], this is not processed to
+convert C<%> into linefeeds. Options C<-q> and C<-n> are not processed
+into any meaningful format.
+
+=item comment
+
+The contents of a comment if the type is L</comment>.
+
+=item dom
+
+The day of the month field of the crontab for a line of type
+L</job>. See L</Time fields>.
+
+=item dow
+
+The day of the week field of the crontab for a line of type
+L</job>. Three-letter abbreviations C<mon>, C<tue> etc. are converted
+case-insensitively to numbers 0 to 6. See L</Time fields>. The full
+names of the days are not accepted, see L</SPECIFICATIONS>.
+
+=item hour
+
+The hour field of the crontab for a line of type
+L</job>. See L</Time fields>.
+
+=item name
+
+The name of an environment variable, for lines of type L</env>.
+
+=item line
+
+The line number of the crontab file, starting from 1.
+
+=item minute
+
+The minute field of the crontab for a line of type L</job>. See
+L</Time fields>.
+
+=item month
+
+The month field of the crontab for a line of type
+L</job>. Three-letter abbreviations of the English month names like
+C<Jan> are converted case-insensitively into numbers 1 to 12 for
+January to December. See L</Time fields>. As per crontab itself, the
+full names of the months are not accepted, see L</SPECIFICATIONS>.
+
+=item special
+
+This contains special time values for a line of type L</job> where
+these cannot be converted into ordinary time fields. Currently this
+may contain two fields, C<reboot> for actions upon reboot (C<@reboot>
+commands), and C<every_second> for C<@every_second> commands. 
+
+In these special cases, L</minute> and the other time fields are not
+set. However, where possible, other special formats like
+C<@every_minute> or C<@weekly> are converted into numerical cron
+fields. See the L</time> entry for the original content. A full list
+of @ commands is available in the crontab manual page (see L</Unix
+manual pages>) or in the source code of this module.
+
+=item text
+
+The unaltered text of the line of the file. The final linefeed is
+removed.
+
+=item time
+
+For a line of type L</job>, this contains the unaltered time field of
+the file. This is unaltered, so if the input time is an C<@> command
+or contains names of days or months, that will be left unchanged here.
+
+=item user
+
+The user who runs the cron job. This is not defined unless you use the
+L</system> option. The optional group and login class of the user
+field are not parsed out from the user name, so you need to extract
+those yourself, if necessary.
+
+=item value
+
+The value of an environment variable, for lines of type L</env>.
+
+=back
+
+=head3 Time fields
+
+Time fields are array references. The elements of the array are the
+elements of the comma-separated list. For example in JSON format
+
+[% example("cron-to-json") %]
+
+Each element is a hash reference with the following keys:
+
+=over
+
+=item type
+
+All elements contain this. This can be
+
+=over
+
+=item C<each>
+
+This corresponds to crontab C<*>.
+
+=item C<every>
+
+This corresponds to crontab C<*/n> where C<n> is a number, stored in
+L</step>.
+
+=item C<range>
+
+This corresponds to crontab C<m-n> where C<m> and C<n> are numbers
+stored in L</start> and L</end> respectively.
+
+=item C<range-every>
+
+This corresponds to crontab C<a-b/c> where C<a>, C<b> and C<c> are
+numbers stored in L</start>, L</end> and L</step> respectively.
+
+=item C<single>
+
+This corresponds to crontab C<n>, a single number, stored in L</value>.
+
+=back
+
+=item end
+
+The end of the range in L</range> or L</range-every>.
+
+=item start
+
+The start of the range in L</range> or L</range-every>.
+
+=item step
+
+The step value (after /) in L</every> or L</range-every>.
+
+=item value
+
+The value in L</single>.
+
+=back
+
+=head3 Options
+
+The options for L</parse_crontab> and L</parse_crontab_file> are as
+follows:
+
+=over
+
+=item strip
+
+    my @nocomments = parse_crontab_file ('file', strip => 1);
+
+Skip over comments and blank lines in the crontab file.
+
+=item system
+
+    my @syscron = parse_crontab_file ('/etc/crontab', system => 1);
+
+Parse as a system crontab, return the L</user> field. See L</Unix
+manual pages> for details.
+
+=item text
+
+    my @lines = parse_crontab (text => $crontab_text);
+
+Parse some text you supply. If used with L</parse_crontab_file>, it
+overrides reading the file.
+
+=back
+
+=head1 DEPENDENCIES
+
+=over
+
+=item L<Date::Calc>
+
+Date::Calc is used for calculating the number of days in a month and
+the day of the week, and for getting the current time.
+
+=item L<File::Temp>
+
+L<File::Temp> is used by L</parse_crontab> to reading the user crontab
+file.
+
+=item L<File::Slurper>
+
+L<File::Slurper/read_binary> is used to read crontab files.
+
+=back
+
+=head1 SPECIFICATIONS
+
+[% info.colon %] was written using the implementation of Vixie Cron as
+supplied with the FreeBSD operating system as a reference. Where the
+documentation and the implementation differed, [% info.colon %] has
+followed the implementation and the documentation differences have
+been reported as bugs. (See L<bug report
+#1|https://bugs.freebsd.org/bugzilla/show_bug.cgi?id=253969>).
+
+[% info.colon %] is based on L</crontab2english>, but it removes the
+support for POSIX crontab in that program. The first reason is that we
+don't have a reference implementation of POSIX crontab, and the second
+reason is that the implementation in C<crontab2english> differs from
+the written specifications we could find online. We would be happy to
+add POSIX crontab support to this module but currently lack the
+reliable information needed to do so.
+
+Vixie Cron accepts three-letter names like C<Mon> or C<Jan>, but it
+doesn't accept full names of months, such as C<January>, or days of
+the week C<Monday>, so these are not accepted by [% info.colon %].
+
+It also accepts things like C<*,5> as time values, even though the 5
+is presumably redundant, so that is supported here.
+
+=head1 SEE ALSO
+
+=head2 CPAN
+
+=over
+
+=item L<Algorithm::Cron>
+
+It expands crontab entries into lists of minutes, hours, and so on. It
+also includes an extension to seconds. There is a C<next_time> method
+as well, which, given a crontab entry, returns the next time that a
+cron job will run. It supports named weekdays and named months. It
+doesn't support C<@> commands like C<@weekly>.
+
+=item L<App::CronUtils>
+
+It's a wrapper module which returns the results from
+L</Pegex::Crontab>, except if the user has L</Parse::Crontab> and
+doesn't have Pegex::Crontab, even though Pegex::Crontab is listed as a
+dependency of this module.
+
+The dependency list in Makefile.PL includes a fairly long list of
+modules by the same author as prerequisites, but these aren't actually
+used by the module.
+
+=item L<Config::Crontab>
+
+We tested this module before creating [% info.colon %] but found that
+although it seems to be comprehensive, it is difficult to use. Parsing
+in a crontab file and looking at the results with Config::Crontab
+involved structures not native to cron itself, but which the author
+decided to impose onto the crontab file.
+
+We felt that this was overcomplicating things. The crontab file is a
+line-by-line format. Comments are not significant, nor are the
+comments associated with particular commands. Also, the limited number
+of environment variables allowed in a crontab file are not associated
+with particular commands. Blank lines in the crontab file have no
+meaning at all.
+
+=item L<Cron::RunJob>
+
+It doesn't use cron itself to run jobs, but implements its own timed
+job system.
+
+=item L<Crontab::HTML>
+
+Convert a crontab file into HTML for viewing in a browser. The
+motivation for writing Crontab::Parse was to make this, since we could
+not find any suitable crontab parser on CPAN.
+
+=item L<DateTime::Event::Cron>
+
+"DateTime extension for generating recurrence sets from crontab lines
+and files." It is based on L</Set::Crontab> and uses that to convert
+crontab entries into either L<DateTime::Set> sets of times or various
+other L<DateTime> constructions.
+
+=item L<ParseCron>
+
+It's actually a copy of L</crontab2english> but it doesn't acknowledge
+that anywhere.
+
+=item L<Parse::Crontab>
+
+It doesn't have very much documentation, and it doesn't seem to handle
+ranges or lists.
+
+=item L<Pegex::Crontab>
+
+It is an example of L<Pegex>. There seems to be no parsing of the
+component parts of time fields such as ranges or lists. As of version
+0.23, the current version at the time of release of this module, L<it
+allowed C<mon> or C<fri> as a type of
+minute|https://github.com/ingydotnet/pegex-crontab-pm/issues/6>, but
+L<it didn't allow C<jan> for
+months|https://github.com/ingydotnet/pegex-crontab-pm/issues/7>.
+
+=item L<RunApp::Cron>
+
+Undocumented module.
+
+=item L<Set::Crontab>
+
+This parses the list and range fields of crontabs into integer
+lists. It also defines some extensions.
+
+=item L<Time::Crontab>
+
+It can only parse a single string of the crontab at a time, and it
+doesn't support lists or ranges.
+
+=back
+
+=head2 Other crontab software
+
+=over
+
+=item L<crontab2english|https://interglacial.com/pub/crontab2english.html>
+
+This is a Perl script to convert a crontab file into English which
+served as the basis of [% info.colon %].
+
+=back
+
+=head2 About Cron
+
+=over
+
+=item Unix manual pages
+
+On a Unix-like system, basic information on crontab is found under
+C<man 1 crontab>, and C<man 5 crontab> gives detailed information on
+the file format. C<man 8 cron> gives information about the daemon
+which runs the service. It is a little confusing that C<man crontab>
+brings up a relatively brief page, and the most useful information is
+found under C<man 5 crontab>.
+
+=back
+
 [% INCLUDE "author" %]
+
+Crontab::Parse is a fork of C<crontab2english> by Sean M. Burke, which
+is copyright by him and licenced under the same terms as above. See
+L<https://interglacial.com/pub/crontab2english.html> for details of
+that. Several of the tests of the module are adapted from those of
+L<Algorithm::Cron> by Paul Evans which again is licenced under the
+same terms as above.
+
