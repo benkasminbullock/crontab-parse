@@ -18,7 +18,7 @@ our @EXPORT_OK = qw/
 our %EXPORT_TAGS = (
     all => \@EXPORT_OK,
 );
-our $VERSION = '0.01';
+our $VERSION = '0.00_01';
 use File::Temp 'tempfile';
 use File::Slurper 'read_binary';
 use Date::Calc ':all';
@@ -558,10 +558,10 @@ sub cron_next
     if (cron_run ($map, $now)) {
 	$skip = 1;
     }
-    my %next;
     my $year = $now->{year};
     # We have to cycle around to this month again to deal with yearly
-    # jobs.
+    # jobs. If the job is 29 Feb we will have to cycle four years or
+    # more, but that case isn't handled yet.
     my @months = ($now->{month}..12, 1..$now->{month});
     for my $month (@months) {
 	my $is_first_month = ($year == $now->{year} &&

@@ -13,6 +13,7 @@ WriteMakefile (
     AUTHOR => 'Ben Bullock <bkb@cpan.org>',
     LICENSE => 'perl',
     PREREQ_PM => {
+	'Date::Calc' => '6.4',
 	'File::Temp' => '0.2309',
 	'File::Slurper' => '0.012',
     },
