@@ -46,21 +46,23 @@ as determined by C<System_Clock> in L</Date::Calc>. It is also
 possible to specify a time, as a hash reference:
 
     my $next = cron_next ($map, {year => 2021, month => 3,
-                          dom => 4, dow => 4, hour => 12, minute => 12});
+                          dom => 4, hour => 12, minute => 12});
 
 Although it's not part of a crontab time value, the year needs to be
 supplied with the time, since it may be necessary to work out the day
-of the week of a month day, or the number of days in a month. The
-return value is a hash reference with the fields C<month> (from 1-12),
-C<dom> (from 1-31), C<dow> (from 0-6), C<hour> (from 0-23), and minute
-(from 0-59). This may be converted to English using
+of the week of a month day, or the number of days in a month. The day
+of the week does not need to be supplied. 
+
+The return value is a hash reference with the fields C<month> (from
+1-12), C<dom> (from 1-31), C<dow> (from 0-6), C<hour> (from 0-23), and
+minute (from 0-59). This may be converted to English using
 L</next_to_english>.
 
 =head2 cron_time_map
 
     my $map = cron_time_map ($line);
 
-Given a line parsed by L</parse_crontab_file>, this returns a "map" of
+Given a line parsed by L</parse_crontab>, this returns a "map" of
 which times the job will run. The map is a hash reference with five
 keys, and each of the values of the keys contains an array reference
 with entries 1 or 0 for "run" or "don't run". The keys are as follows:
@@ -74,16 +76,21 @@ The month. The array reference value 0 is always 0. Values from 1 to
 
 =item dom
 
-The day of the month. The value at 0 is always 0. Values from 1 to 31
-may be 1 or 0. 
+The day of the month. The value of the array reference at 0 is always
+0. Values from 1 to 31 may be 1 or 0.
 
 =item dow
 
-The day of the week, with 0 Sunday and 6 Saturday. Values may be 1 or
-0. 
+The day of the week, with 0 Sunday and 6 Saturday. The values of the
+array reference may be 1 or 0. Inputs using a range ending in 7, such
+as C<5-7>, set the values at 5, 6, and 0 to 1. For example,
 
-In the case that day of week is C<*> and day of month is <*> in the
-crontab, the values are all zero, and the values of L</dom> are all 1.
+[% example("dow-5-7") %]
+
+In the case that the day of week field is C<*>, the values of C<dow>
+are all zero rather than 1, since cron interprets a C<*> value to mean
+"ignore the day of the week" rather than "do this job every day of the
+week".
 
 =item hour
 
@@ -102,7 +109,9 @@ The minute. Values from 0 to 63 may be 1 or 0.
 Convert the time fields of a single line returned from
 L</parse_crontab> back into the crontab time format, separated by tab
 characters (C<"\t">). The names of days of the week and months are not
-preserved but are turned into numbers.
+preserved but are turned into numbers. For example,
+
+[% example("crontab-time") %]
 
 =head2 next_to_english
 
@@ -114,21 +123,51 @@ Convert the result of L</cron_next> into an English sentence.
 
     my @lines = parse_crontab ();
 
-Parse the user's crontab file. All options and other behaviour are
-otherwise identical to L</parse_crontab_file>.
+Parse the user's crontab file. To parse another file, use the L</file>
+option:
 
-    my @lines = parse_crontab (%options);
+    my @lines = parse_crontab (file => $file);
 
-=head2 parse_crontab_file
+For example, to parse the system crontab:
 
-    my @lines = parse_crontab_file ($file, %options);
-
-Parse a crontab file. For example, to parse the system crontab:
-
-    my @lines = parse_crontab_file ('/etc/crontab', system => 1);
+    my @lines = parse_crontab (file => '/etc/crontab', system => 1);
 
 If the L</system> option is set, each line contains a L</user> field
 for the user.
+
+=head3 Options
+
+The options for L</parse_crontab> are:
+
+=over
+
+=item file
+
+    my @lines = parse_crontab (file => '/var/cron/tabs/ben');
+
+Specify a file to parse.
+
+=item strip
+
+    my @nocomments = parse_crontab (strip => 1);
+
+Skip over comments and blank lines in the crontab file.
+
+=item system
+
+    my @syscron = parse_crontab (file => '/etc/crontab', system => 1);
+
+Parse as a system crontab, return the L</user> field. See L</Unix
+manual pages> for details. Non-system cron jobs don't have a user
+field and are run using the users' login.
+
+=item text
+
+    my @lines = parse_crontab (text => $crontab_text);
+
+Parse some text you supply rather than a file.
+
+=back
 
 =head3 Return value
 
@@ -323,35 +362,6 @@ The value in L</single>.
 
 =back
 
-=head3 Options
-
-The options for L</parse_crontab> and L</parse_crontab_file> are as
-follows:
-
-=over
-
-=item strip
-
-    my @nocomments = parse_crontab_file ('file', strip => 1);
-
-Skip over comments and blank lines in the crontab file.
-
-=item system
-
-    my @syscron = parse_crontab_file ('/etc/crontab', system => 1);
-
-Parse as a system crontab, return the L</user> field. See L</Unix
-manual pages> for details.
-
-=item text
-
-    my @lines = parse_crontab (text => $crontab_text);
-
-Parse some text you supply. If used with L</parse_crontab_file>, it
-overrides reading the file.
-
-=back
-
 =head1 DEPENDENCIES
 
 =over
@@ -396,21 +406,37 @@ the week C<Monday>, so these are not accepted by [% info.colon %].
 It also accepts things like C<*,5> as time values, even though the 5
 is presumably redundant, so that is supported here.
 
+Vixie Cron allows the following kinds of cron entries:
+
+    * * 31 2 *
+
+an impossible date, so [% info.colon %] does too.
+
 =head1 SEE ALSO
 
 =head2 CPAN
-
+[% star = "⭐" %]
+[% MACRO cpm(module) BLOCK %]
+=item L<[% module %]>
+[% IF mod2info.defined(module) %]
+[% info = mod2info.$module %]
+[
+[%- IF info.log_fav > 0 -%]
+[% star.repeat(info.log_fav) %] [% END -%]
+Author: L<[% info.author %]|https://metacpan.org/author/[% info.author %]>; Date: C<[% info.date %]>; Version: C<[% info.version %]>]
+[% END %]
+[% END %]
 =over
 
-=item L<Algorithm::Cron>
+[% cpm("Algorithm::Cron") %]
 
-It expands crontab entries into lists of minutes, hours, and so on. It
-also includes an extension to seconds. There is a C<next_time> method
-as well, which, given a crontab entry, returns the next time that a
-cron job will run. It supports named weekdays and named months. It
-doesn't support C<@> commands like C<@weekly>.
+👍 It expands crontab entries into lists of minutes, hours, and so
+on. It also includes an extension to seconds. There is a C<next_time>
+method as well, which, given a crontab entry, returns the next time
+that a cron job will run. It supports named weekdays and named
+months. It doesn't support C<@> commands like C<@weekly>.
 
-=item L<App::CronUtils>
+[% cpm("App::CronUtils") %]
 
 It's a wrapper module which returns the results from
 L</Pegex::Crontab>, except if the user has L</Parse::Crontab> and
@@ -421,7 +447,7 @@ The dependency list in Makefile.PL includes a fairly long list of
 modules by the same author as prerequisites, but these aren't actually
 used by the module.
 
-=item L<Config::Crontab>
+[% cpm("Config::Crontab") %]
 
 We tested this module before creating [% info.colon %] but found that
 although it seems to be comprehensive, it is difficult to use. Parsing
@@ -436,7 +462,7 @@ of environment variables allowed in a crontab file are not associated
 with particular commands. Blank lines in the crontab file have no
 meaning at all.
 
-=item L<Cron::RunJob>
+[% cpm("Cron::RunJob") %]
 
 It doesn't use cron itself to run jobs, but implements its own timed
 job system.
@@ -447,24 +473,23 @@ Convert a crontab file into HTML for viewing in a browser. The
 motivation for writing Crontab::Parse was to make this, since we could
 not find any suitable crontab parser on CPAN.
 
-=item L<DateTime::Event::Cron>
+[% cpm("DateTime::Event::Cron") %]
 
-"DateTime extension for generating recurrence sets from crontab lines
-and files." It is based on L</Set::Crontab> and uses that to convert
-crontab entries into either L<DateTime::Set> sets of times or various
-other L<DateTime> constructions.
+👍 "DateTime extension for generating recurrence sets from crontab
+lines and files." It is based on L</Set::Crontab> and uses that to
+convert crontab entries into either L<DateTime::Set> sets of times or
+various other L<DateTime> constructions.
 
-=item L<ParseCron>
+[% cpm("ParseCron") %]
 
 It's actually a copy of L</crontab2english> but it doesn't acknowledge
 that anywhere.
 
-=item L<Parse::Crontab>
+[% cpm("Parse::Crontab") %]
 
-It doesn't have very much documentation, and it doesn't seem to handle
-ranges or lists.
+Parse Vixie crontabs. 
 
-=item L<Pegex::Crontab>
+[% cpm("Pegex::Crontab") %]
 
 It is an example of L<Pegex>. There seems to be no parsing of the
 component parts of time fields such as ranges or lists. As of version
@@ -474,16 +499,24 @@ minute|https://github.com/ingydotnet/pegex-crontab-pm/issues/6>, but
 L<it didn't allow C<jan> for
 months|https://github.com/ingydotnet/pegex-crontab-pm/issues/7>.
 
-=item L<RunApp::Cron>
+[% cpm("Schedule::Cron::Events") %]
 
-Undocumented module.
+This is based on L</Set::Crontab> and it returns the next or previous
+times the cron job will happen relative to a given time.
 
-=item L<Set::Crontab>
+[% cpm("Set::Crontab") %]
 
 This parses the list and range fields of crontabs into integer
 lists. It also defines some extensions.
 
-=item L<Time::Crontab>
+[% cpm("snaked") %]
+
+Supposedly an improved version of cron, but it's actually
+abandonware. Much of the documented content of the module doesn't
+exist and the rest is not fully implemented. We're not entirely sure
+why this has five stars on MetaCPAN, but there you go.
+
+[% cpm("Time::Crontab") %]
 
 It can only parse a single string of the crontab at a time, and it
 doesn't support lists or ranges.

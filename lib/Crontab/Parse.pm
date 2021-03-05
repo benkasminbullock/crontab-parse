@@ -10,7 +10,6 @@ our @EXPORT_OK = qw/
     cron_next
     next_to_english
     parse_crontab
-    parse_crontab_file
     cron_time_map
     time_to_english
     to_english
@@ -102,12 +101,7 @@ our @names = (qw!minute hour dom month dow!);
 
 sub parse_crontab
 {
-    parse_crontab_file (undef, @_);
-}
-
-sub parse_crontab_file
-{
-    my ($file, %options) = @_;
+    my (%options) = @_;
     # System crontab, has user name as well.
     my $system = $options{system};
     if ($system) {
@@ -119,10 +113,14 @@ sub parse_crontab_file
     }
     my $text = $options{text};
     if ($text) {
+	if ($options{file}) {
+	    carp "Both of text and file options specified";
+	}
 	delete $options{text};
     }
-    elsif ($file) {
-	$text = read_binary ($file);
+    elsif ($options{file}) {
+	$text = read_binary ($options{file});
+	delete $options{file};
     }
     else {
 	$text = crontab_l ();
